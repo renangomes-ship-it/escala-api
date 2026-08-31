@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Patch } from '@nestjs/common';
 import { OficialService } from './oficial.service';
 import { CreateOficialDto } from './dto/create-oficial.dto';
 import { UpdateOficialDto } from './dto/update-oficial.dto';
@@ -22,13 +22,13 @@ export class OficialController {
     return this.oficialService.findOne(+id);
   }
 
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.oficialService.remove(+id); 
+  }
+
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateOficialDto: UpdateOficialDto) {
     return this.oficialService.update(+id, updateOficialDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.oficialService.remove(+id);
   }
 }

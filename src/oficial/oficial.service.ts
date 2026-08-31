@@ -1,26 +1,46 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CreateOficialDto } from './dto/create-oficial.dto';
+import { Oficial } from './entities/oficial.entity';
 import { UpdateOficialDto } from './dto/update-oficial.dto';
 
 @Injectable()
 export class OficialService {
-  create(createOficialDto: CreateOficialDto) {
-    return 'This action adds a new oficial';
+  
+  constructor(
+    @InjectRepository(Oficial)
+    private oficialRepository: Repository<Oficial>,
+  ) {}
+
+  //Cria novo oficial na tabela
+  async create(createOficialDto: CreateOficialDto) {
+    const novoOficial = this.oficialRepository.create(createOficialDto);
+    
+    return await this.oficialRepository.save(novoOficial);
   }
 
-  findAll() {
-    return `This action returns all oficial`;
+  //Retorna todos os oficiais
+  async findAll() {
+    return await this.oficialRepository.find();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} oficial`;
+  // Busca um oficial pelo ID
+  async findOne(id: number) {
+    return await this.oficialRepository.findOneBy({ id });
   }
 
-  update(id: number, updateOficialDto: UpdateOficialDto) {
-    return `This action updates a #${id} oficial`;
+  // Deleta pelo ID
+  async remove(id: number) {
+    await this.oficialRepository.delete(id);
+    
+    return { mensagem: `Oficial com ID ${id} removido com sucesso da base de dados.` };
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} oficial`;
+  // Atualiza oficias por id apenas com informações novas.
+  async update(id: number, updateOficialDto: UpdateOficialDto) {
+    await this.oficialRepository.update(id, updateOficialDto);
+
+    return await this.oficialRepository.findOneBy({ id });
   }
 }
