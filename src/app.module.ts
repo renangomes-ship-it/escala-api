@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { OficialModule } from './oficial/oficial.module';
+import { EscalaModule } from './escala/escala.module';
+import { ServicoModule } from './servico/servico.module';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { OficialModule } from './oficial/oficial.module';
       synchronize: true, 
     }),
     OficialModule,
+    EscalaModule,
+    ServicoModule,
   ],
   controllers: [AppController],
   providers: [AppService],
