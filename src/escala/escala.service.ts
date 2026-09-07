@@ -13,6 +13,26 @@ export class EscalaService {
   ) {}
 
   async create(createEscalaDto: CreateEscalaDto) {
+    // Se a lista de serviços não foi enviada ou está vazia, geramos o mês inteiro automaticamente
+    if (!createEscalaDto.servicos || createEscalaDto.servicos.length === 0) {
+      const { mes, ano } = createEscalaDto;
+      const totalDias = new Date(ano, mes, 0).getDate(); // Descobre o último dia do mês (ex: 30 para setembro)
+      const servicosGerados: any[] = [];
+
+      for (let dia = 1; dia <= totalDias; dia++) {
+        const diaStr = dia.toString().padStart(2, '0');
+        const mesStr = mes.toString().padStart(2, '0');
+        const dataServico = `${ano}-${mesStr}-${diaStr}`;
+
+        servicosGerados.push({
+          data_servico: dataServico,
+          // oficial_dia e oficial_sobreaviso não são enviados, logo salvam como null no banco
+        });
+      }
+      
+      createEscalaDto.servicos = servicosGerados;
+    }
+
     const novaEscala = this.escalaRepository.create(createEscalaDto);
     return await this.escalaRepository.save(novaEscala);
   }

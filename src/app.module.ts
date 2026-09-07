@@ -5,6 +5,8 @@ import { AppService } from './app.service';
 import { OficialModule } from './oficial/oficial.module';
 import { EscalaModule } from './escala/escala.module';
 import { ServicoModule } from './servico/servico.module';
+import { FilaEscolhaModule } from './fila-escolha/fila-escolha.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { ServicoModule } from './servico/servico.module';
     OficialModule,
     EscalaModule,
     ServicoModule,
+    FilaEscolhaModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

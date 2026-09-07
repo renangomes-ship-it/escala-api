@@ -1,4 +1,4 @@
-import { IsNumber, IsString, IsNotEmpty } from 'class-validator';
+import { IsNumber, IsString, IsNotEmpty, IsOptional, IsArray } from 'class-validator';
 
 export class CreateEscalaDto {
   @IsNumber({}, { message: 'O mês deve ser um número (ex: 10).' })
@@ -12,4 +12,8 @@ export class CreateEscalaDto {
   @IsString({ message: 'A OBM deve ser um texto válido.' })
   @IsNotEmpty({ message: 'A OBM (Quartel) é obrigatória.' })
   obm: string;
+
+  @IsOptional()
+  @IsArray({ message: 'Os serviços devem estar em formato de lista.' })
+  servicos?: any[];
 }

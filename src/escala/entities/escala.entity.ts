@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import { Servico } from '../../servico/entities/servico.entity';
+import { FilaEscolha } from '../../fila-escolha/entities/fila-escolha.entity';
 
 @Entity('escalas')
 export class Escala {
@@ -22,6 +23,12 @@ export class Escala {
   boletim_interno: string; 
 
   // 1 Escala tem N Serviços
-  @OneToMany(() => Servico, (servico) => servico.escala)
+  @OneToMany(() => Servico, (servico) => servico.escala, { 
+    cascade: true // ISSO AQUI FAZ A MÁGICA
+  })
   servicos: Servico[];
+  
+  @OneToMany(() => FilaEscolha, (fila) => fila.escala, { cascade: true })
+  fila_escolhas: FilaEscolha[];
+
 }
