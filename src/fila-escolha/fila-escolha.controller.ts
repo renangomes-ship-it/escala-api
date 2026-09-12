@@ -8,9 +8,9 @@ export class FilaEscolhaController {
   @Post('gerar/:escalaId')
   async gerarFila(
     @Param('escalaId') escalaId: string,
-    @Body('oficiaisIds') oficiaisIds: number[],
+    @Body('dadosFila') dadosFila: any[],
   ) {
-    return await this.filaEscolhaService.gerarFila(+escalaId, oficiaisIds);
+    return await this.filaEscolhaService.gerarFila(+escalaId, dadosFila);
   }
 
   // GET /fila-escolha/status/5 -> Retorna o raio-x da fila
@@ -23,6 +23,15 @@ export class FilaEscolhaController {
   @Post('passar-turno/:escalaId')
   async passarTurno(@Param('escalaId') escalaId: string) {
     return await this.filaEscolhaService.passarTurno(+escalaId);
+  }
+
+  // POST /fila-escolha/reivindicar/5/10 -> Oficial pulado rouba a vez
+  @Post('reivindicar/:escalaId/:oficialId')
+  async reivindicarVez(
+    @Param('escalaId') escalaId: string,
+    @Param('oficialId') oficialId: string,
+  ) {
+    return await this.filaEscolhaService.reivindicarVez(+escalaId, +oficialId);
   }
 
   @Post('registrar-vaga')
@@ -51,5 +60,10 @@ export class FilaEscolhaController {
     }
 
     return await this.filaEscolhaService.finalizarTurno(body.escalaId, body.oficialId);
+  }
+
+  @Post('remover-vaga')
+  async removerVaga(@Body() body: { escalaId: number; oficialId: number; servicoId: number; tipoVaga: 'DIA' | 'SOBREAVISO' }) {
+    return await this.filaEscolhaService.removerEscolhaVaga(body.escalaId, body.oficialId, body.servicoId, body.tipoVaga);
   }
 }

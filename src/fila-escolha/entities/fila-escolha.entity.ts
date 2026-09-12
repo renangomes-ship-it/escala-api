@@ -1,12 +1,13 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { Escala } from '../../escala/entities/escala.entity';
-import { Oficial } from '../../oficial/entities/oficial.entity'; // Ajuste o caminho se necessário
+import { Oficial } from '../../oficial/entities/oficial.entity';
 
 export enum StatusFila {
   AGUARDANDO = 'AGUARDANDO',
   ESCOLHENDO = 'ESCOLHENDO',
   FINALIZADO = 'FINALIZADO',
   PULADO = 'PULADO',
+  INTERROMPIDO = 'INTERROMPIDO',
 }
 
 @Entity('fila_escolha')
@@ -37,4 +38,16 @@ export class FilaEscolha {
 
   @Column({ type: 'datetime', nullable: true })
   limite_turno: Date;
+
+  @Column({ type: 'int', default: 0 })
+  cota_preta: number;
+
+  @Column({ type: 'int', default: 0 })
+  cota_roxa: number;
+
+  @Column({ type: 'int', default: 0 })
+  cota_vermelha: number;
+
+  @Column({ nullable: true })
+  observacao: string; // Para anotar se está INAPTO
 }

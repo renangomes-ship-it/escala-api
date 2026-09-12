@@ -11,61 +11,54 @@ export class FilaEscolhaService {
     @InjectRepository(FilaEscolha)
     private readonly filaRepository: Repository<FilaEscolha>,
     
-    // Injetando o repositório do Serviço aqui
     @InjectRepository(Servico)
     private readonly servicoRepository: Repository<Servico>,
   ) {}
 
-  // 1. Motor que recebe a ordem do Escalante e gera a fila
-  async gerarFila(escalaId: number, oficiaisIdsOrdenados: number[]) {
+  // 1. GERAR A FILA COM AS COTAS
+  async gerarFila(escalaId: number, dadosFila: any[]) {
     // Medida de segurança: Limpa a fila caso o escalante clique duas vezes sem querer
     await this.filaRepository.delete({ escala: { id: escalaId } });
 
-    // Monta o array de inserção respeitando a ordem recebida (1º, 2º, 3º...)
-    const filaRegistros = oficiaisIdsOrdenados.map((oficialId, index) => {
+    const filaRegistros = dadosFila.map((dado, index) => {
       return this.filaRepository.create({
         escala: { id: escalaId },
-        oficial: { id: oficialId },
+        oficial: { id: dado.oficialId },
         posicao: index + 1,
-        status: StatusFila.AGUARDANDO,
+        // Se for Inapto, já nasce finalizado para não trancar a fila
+        status: dado.apto ? StatusFila.AGUARDANDO : StatusFila.FINALIZADO,
+        cota_preta: dado.cotas.pretas,
+        cota_roxa: dado.cotas.roxas,
+        cota_vermelha: dado.cotas.vermelhas,
+        observacao: dado.apto ? '' : 'INAPTO',
       });
     });
 
-    // Persiste toda a tropa no banco de uma vez
     await this.filaRepository.save(filaRegistros);
-
-    // Chama o método abaixo para acionar o cronômetro do oficial número 1
-    return await this.iniciarTurno(escalaId, 1);
+    await this.avancarFila(escalaId); // Inicia o primeiro
+    return { mensagem: 'Fila gerada e iniciada com sucesso!' };
   }
 
-  // 2. Aciona o cronômetro e muda o status de quem vai escolher
-  async iniciarTurno(escalaId: number, posicao: number) {
-    const turno = await this.filaRepository.findOne({
-      where: { escala: { id: escalaId }, posicao: posicao },
-      relations: {
-        oficial: true,
-      },
+  // Lógica interna para achar o próximo válido
+  private async avancarFila(escalaId: number) {
+    const proximo = await this.filaRepository.findOne({
+      where: { escala: { id: escalaId }, status: StatusFila.AGUARDANDO },
+      order: { posicao: 'ASC' }
     });
 
-    if (!turno) {
-      throw new NotFoundException('Posição não encontrada na fila da escala.');
+    if (proximo) {
+      const limite = new Date();
+      limite.setHours(limite.getHours() + 24); // 24h Padrão
+      
+      proximo.status = StatusFila.ESCOLHENDO;
+      proximo.inicio_turno = new Date();
+      proximo.limite_turno = limite;
+      
+      await this.filaRepository.save(proximo);
+      return { mensagem: `Turno passado para a posição ${proximo.posicao}` };
     }
-
-    // O sistema define 24 horas cravadas para a escolha normal
-    const dataInicio = new Date();
-    const dataLimite = new Date();
-    dataLimite.setHours(dataInicio.getHours() + 24);
-
-    turno.status = StatusFila.ESCOLHENDO;
-    turno.inicio_turno = dataInicio;
-    turno.limite_turno = dataLimite;
-
-    await this.filaRepository.save(turno);
-
-    return { 
-      mensagem: `Relógio acionado! Turno de escolha liberado para o oficial da posição ${posicao}.`, 
-      limite_turno: turno.limite_turno 
-    };
+    
+    return { mensagem: 'A fila acabou! A escala está preenchida.' };
   }
 
   async obterFilaPorEscala(escalaId: number) {
@@ -79,7 +72,6 @@ export class FilaEscolhaService {
       throw new NotFoundException('Nenhuma fila encontrada para esta escala.');
     }
 
-    // Identifica quem está escolhendo no momento atual
     const atual = fila.find((f) => f.status === StatusFila.ESCOLHENDO);
 
     return {
@@ -90,9 +82,8 @@ export class FilaEscolhaService {
     };
   }
 
-  // Pula o oficial atual e ativa o próximo da fila
+  // 2. PULAR OFICIAL
   async passarTurno(escalaId: number) {
-    // 1. Encontra quem está com o turno ativo ('ESCOLHENDO')
     const turnoAtual = await this.filaRepository.findOne({
       where: { escala: { id: escalaId }, status: StatusFila.ESCOLHENDO },
     });
@@ -101,40 +92,61 @@ export class FilaEscolhaService {
       throw new NotFoundException('Não há nenhum oficial com o turno ativo no momento.');
     }
 
-    // 2. Marca o atual como PULADO
     turnoAtual.status = StatusFila.PULADO;
     await this.filaRepository.save(turnoAtual);
 
-    // 3. Busca o próximo na sequência matemática (posicao + 1)
-    const proximaPosicao = turnoAtual.posicao + 1;
-    const proximoTurno = await this.filaRepository.findOne({
-      where: { escala: { id: escalaId }, posicao: proximaPosicao },
-    });
-
-    if (!proximoTurno) {
-      return { mensagem: 'Fim da fila! Todos os oficiais já passaram pelo ciclo de escolha.' };
-    }
-
-    // 4. Inicia o turno do próximo
-    return await this.iniciarTurno(escalaId, proximaPosicao);
+    return await this.avancarFila(escalaId);
   }
 
-  // Finaliza o turno de escolha com sucesso e passa para o próximo
-  async finalizarTurno(escalaId: number, oficialId: number) {
-    // 1. Confere se é realmente o turno do oficial que está pedindo para finalizar
-    const turnoAtual = await this.filaRepository.findOne({
-      where: { 
-        escala: { id: escalaId }, 
-        oficial: { id: oficialId }, 
-        status: StatusFila.ESCOLHENDO 
-      },
+  // 3. REIVINDICAR VEZ (Roubo)
+  async reivindicarVez(escalaId: number, oficialId: number) {
+    const meuTurno = await this.filaRepository.findOne({ 
+      where: { escala: { id: escalaId }, oficial: { id: oficialId } } 
+    });
+
+    if (!meuTurno || meuTurno.status !== StatusFila.PULADO) {
+      throw new BadRequestException('Você só pode reivindicar se tiver sido pulado.');
+    }
+
+    const turnoAtual = await this.filaRepository.findOne({ 
+      where: { escala: { id: escalaId }, status: StatusFila.ESCOLHENDO } 
     });
 
     if (!turnoAtual) {
+      throw new BadRequestException('Ninguém está escolhendo no momento.');
+    }
+
+    if (turnoAtual.posicao <= meuTurno.posicao) {
+      throw new BadRequestException('Você não pode reivindicar a vez de um oficial mais antigo que você.');
+    }
+
+    // Interrompe o atual
+    turnoAtual.status = StatusFila.INTERROMPIDO;
+    await this.filaRepository.save(turnoAtual);
+
+    // Ativa o reivindicante com punição (Apenas 1 hora)
+    const limite = new Date();
+    limite.setHours(limite.getHours() + 1);
+    
+    meuTurno.status = StatusFila.ESCOLHENDO;
+    meuTurno.inicio_turno = new Date();
+    meuTurno.limite_turno = limite;
+    await this.filaRepository.save(meuTurno);
+
+    return { mensagem: 'Vez reivindicada com sucesso. Você tem 1 hora.' };
+  }
+
+  // 4. FINALIZAR ESCOLHA
+  async finalizarTurno(escalaId: number, oficialId: number) {
+    const meuTurno = await this.filaRepository.findOne({ 
+      where: { escala: { id: escalaId }, oficial: { id: oficialId }, status: StatusFila.ESCOLHENDO } 
+    });
+
+    if (!meuTurno) {
       throw new BadRequestException('Acesso negado: Você não possui um turno ativo para finalizar.');
     }
 
-    // 2. Validação de Cota: Conta quantas vagas ele pegou nessa escala (Dia ou Sobreaviso)
+    // Validação de Cota: Conta quantas vagas ele pegou nessa escala (Dia ou Sobreaviso)
     const vagasEscolhidas = await this.servicoRepository.count({
       where: [
         { escala: { id: escalaId }, oficial_dia: { id: oficialId } },
@@ -147,33 +159,35 @@ export class FilaEscolhaService {
       throw new BadRequestException('Você precisa escolher pelo menos uma vaga (Titular ou Sobreaviso) antes de finalizar.');
     }
 
-    // 3. Marca o turno do oficial atual como FINALIZADO (Missão Cumprida)
-    turnoAtual.status = StatusFila.FINALIZADO;
-    await this.filaRepository.save(turnoAtual);
+    meuTurno.status = StatusFila.FINALIZADO;
+    await this.filaRepository.save(meuTurno);
 
-    // 4. Descobre quem é o próximo da fila matematicamente
-    const proximaPosicao = turnoAtual.posicao + 1;
-    const proximoTurno = await this.filaRepository.findOne({
-      where: { escala: { id: escalaId }, posicao: proximaPosicao },
+    // Vê se alguém foi interrompido (devolve a vez pra ele)
+    const turnoInterrompido = await this.filaRepository.findOne({ 
+      where: { escala: { id: escalaId }, status: StatusFila.INTERROMPIDO } 
     });
-
-    // Se não tiver próximo, a escala de escolha inteira acabou!
-    if (!proximoTurno) {
+    
+    if (turnoInterrompido) {
+      const limite = new Date();
+      limite.setHours(limite.getHours() + 24); // Devolve as 24h inteiras pra ele
+      
+      turnoInterrompido.status = StatusFila.ESCOLHENDO;
+      turnoInterrompido.limite_turno = limite;
+      await this.filaRepository.save(turnoInterrompido);
+      
       return { 
-        mensagem: 'Turno finalizado! Você era o último da fila. A escala está totalmente preenchida.',
-        vagasEscolhidas 
+        mensagem: `Turno finalizado! Você assumiu ${vagasEscolhidas} vaga(s). O oficial interrompido retornou.`,
+        vagasEscolhidas
       };
     }
 
-    // 5. Inicia o relógio do próximo
-    await this.iniciarTurno(escalaId, proximaPosicao);
-
-    return { 
-      mensagem: `Turno finalizado com sucesso! Você assumiu ${vagasEscolhidas} vaga(s). A vez passou para a posição ${proximaPosicao}.`,
+    // Se ninguém foi interrompido, fila anda normal
+    const proximoPasso = await this.avancarFila(escalaId);
+    return {
+      mensagem: `Turno finalizado com sucesso! Você assumiu ${vagasEscolhidas} vaga(s). ${proximoPasso.mensagem}`,
       vagasEscolhidas
     };
   }
-  
 
   async registrarEscolhaVaga(escalaId: number, oficialId: number, servicoId: number, tipoVaga: 'DIA' | 'SOBREAVISO') {
     // 1. Trava da Fila: Confere se realmente é a vez deste oficial
@@ -225,5 +239,30 @@ export class FilaEscolhaService {
       servicoId: servico.id,
       tipoEscala: servico.tipo_escala
     };
+  }
+
+  // 5. DESFAZER ESCOLHA DE VAGA
+  async removerEscolhaVaga(escalaId: number, oficialId: number, servicoId: number, tipoVaga: 'DIA' | 'SOBREAVISO') {
+    const turnoAtivo = await this.filaRepository.findOne({ where: { escala: { id: escalaId }, oficial: { id: oficialId }, status: StatusFila.ESCOLHENDO } });
+    if (!turnoAtivo) throw new BadRequestException('Acesso negado: Não é o seu turno.');
+
+    const servico = await this.servicoRepository.findOne({ where: { id: servicoId }, relations: { oficial_dia: true, oficial_sobreaviso: true } });
+    if (!servico) throw new NotFoundException('Serviço não encontrado.');
+
+    if (tipoVaga === 'DIA') {
+      if (servico.oficial_dia?.id !== oficialId) throw new BadRequestException('Você só pode remover a sua própria escolha.');
+      
+      // O 'as any' acalma o TypeScript e permite que o TypeORM limpe a vaga no banco
+      servico.oficial_dia = null as any; 
+      
+    } else {
+      if (servico.oficial_sobreaviso?.id !== oficialId) throw new BadRequestException('Você só pode remover a sua própria escolha.');
+      
+      // O 'as any' acalma o TypeScript e permite que o TypeORM limpe a vaga no banco
+      servico.oficial_sobreaviso = null as any;
+    }
+
+    await this.servicoRepository.save(servico);
+    return { mensagem: 'Escolha removida com sucesso.' };
   }
 }
