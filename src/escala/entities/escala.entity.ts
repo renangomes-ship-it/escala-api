@@ -1,8 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, Index } from 'typeorm';
 import { Servico } from '../../servico/entities/servico.entity';
 import { FilaEscolha } from '../../fila-escolha/entities/fila-escolha.entity';
 
 @Entity('escalas')
+@Index('UQ_escalas_obm_mes_ano', ['obm', 'mes', 'ano'], { unique: true })
 export class Escala {
   @PrimaryGeneratedColumn()
   id: number;

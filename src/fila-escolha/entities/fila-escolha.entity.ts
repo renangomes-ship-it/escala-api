@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { Escala } from '../../escala/entities/escala.entity';
 import { Oficial } from '../../oficial/entities/oficial.entity';
 
@@ -11,15 +11,17 @@ export enum StatusFila {
 }
 
 @Entity('fila_escolha')
+@Index('UQ_fila_escala_oficial', ['escala', 'oficial'], { unique: true })
+@Index('UQ_fila_escala_posicao', ['escala', 'posicao'], { unique: true })
 export class FilaEscolha {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Escala, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Escala, { onDelete: 'CASCADE', nullable: false })
   @JoinColumn({ name: 'escala_id' })
   escala: Escala;
 
-  @ManyToOne(() => Oficial)
+  @ManyToOne(() => Oficial, { nullable: false })
   @JoinColumn({ name: 'oficial_id' })
   oficial: Oficial;
 
@@ -49,5 +51,8 @@ export class FilaEscolha {
   cota_vermelha: number;
 
   @Column({ nullable: true })
-  observacao: string; // Para anotar se está INAPTO
+  observacao: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  justificativa_inaptidao: string | null;
 }

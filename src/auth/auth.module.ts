@@ -1,19 +1,28 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
+import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Oficial } from '../oficial/entities/oficial.entity';
 import { JwtStrategy } from './jwt.strategy';
+import {
+  getOptionalEnvironment,
+  getJwtSecret,
+} from '../config/environment';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Oficial]),
     PassportModule,
     JwtModule.register({
-      secret: 'CHAVE_SECRETA_DO_SEU_SISTEMA', 
-      signOptions: { expiresIn: '1d' }, // Tempo de expiração do token
+      secret: getJwtSecret(),
+      signOptions: {
+        expiresIn: getOptionalEnvironment(
+          'JWT_EXPIRES_IN',
+          '1d',
+        ) as JwtSignOptions['expiresIn'],
+      },
     }),
   ],
   controllers: [AuthController],

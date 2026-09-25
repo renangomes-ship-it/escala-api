@@ -1,4 +1,5 @@
-import { IsString, IsEmail, IsNotEmpty, MinLength } from 'class-validator';
+import { IsString, IsEmail, IsNotEmpty, MinLength, IsEnum, IsOptional, IsDateString } from 'class-validator';
+import { Role } from '../entities/oficial.entity';
 
 export class CreateOficialDto {
   @IsString()
@@ -8,6 +9,9 @@ export class CreateOficialDto {
   @IsString()
   @IsNotEmpty()
   posto_graduacao!: string;
+
+  @IsDateString({}, { message: 'A data da última promoção deve ser uma data válida.' })
+  data_ultima_promocao!: string;
 
   @IsString()
   @IsNotEmpty()
@@ -19,6 +23,15 @@ export class CreateOficialDto {
 
   @IsString()
   @IsNotEmpty()
-  @MinLength(6, { message: 'A senha deve ter no mínimo 6 caracteres.' })
+  @MinLength(8, { message: 'A senha deve ter no mínimo 8 caracteres.' })
   senha!: string;
+
+  @IsOptional()
+  @IsEnum(Role)
+  role?: Role;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  obm?: string;
 }

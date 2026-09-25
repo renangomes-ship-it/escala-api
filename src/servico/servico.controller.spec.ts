@@ -1,20 +1,18 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { ServicoController } from './servico.controller';
-import { ServicoService } from './servico.service';
 
 describe('ServicoController', () => {
-  let controller: ServicoController;
+  it('converte o identificador antes de encaminhar a busca', () => {
+    const service = { findOne: jest.fn() };
+    const controller = new ServicoController(service as never);
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [ServicoController],
-      providers: [ServicoService],
-    }).compile();
+    controller.findOne('7', {
+      id: 1,
+      rg: '1',
+      posto: 'CAP',
+      obm: 'OBM de Teste',
+      role: 'ESCALANTE',
+    } as never);
 
-    controller = module.get<ServicoController>(ServicoController);
-  });
-
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+    expect(service.findOne).toHaveBeenCalledWith(7, 'OBM de Teste', false);
   });
 });

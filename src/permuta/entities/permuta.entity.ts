@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index, ManyToOne, JoinColumn } from 'typeorm';
 import { Oficial } from '../../oficial/entities/oficial.entity';
 import { Servico } from '../../servico/entities/servico.entity';
 
@@ -16,7 +16,7 @@ export class Permuta {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Servico, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Servico, { onDelete: 'CASCADE', nullable: false })
   @JoinColumn({ name: 'servico_id' })
   servico: Servico;
 
@@ -46,6 +46,13 @@ export class Permuta {
 
   @Column({ type: 'varchar', default: 'OFICIAL' })
   criado_por: 'OFICIAL' | 'ESCALANTE';
+
+  @Index()
+  @Column({ type: 'char', length: 36, nullable: true })
+  grupo_troca: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  eh_contrapartida: boolean;
 
   @CreateDateColumn()
   data_solicitacao: Date;

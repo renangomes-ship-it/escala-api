@@ -1,8 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, BeforeInsert } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, BeforeInsert, Index } from 'typeorm';
 import { Escala } from '../../escala/entities/escala.entity';
 import { Oficial } from '../../oficial/entities/oficial.entity';
 
 @Entity('servicos')
+@Index('UQ_servicos_escala_data', ['escala', 'data_servico'], { unique: true })
 export class Servico {
   @PrimaryGeneratedColumn()
   id: number;
@@ -10,11 +11,14 @@ export class Servico {
   @Column({ type: 'date' })
   data_servico: string; 
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ type: 'varchar' })
   tipo_escala: string;
   
   // N Serviços pertencem a 1 Escala (Capa do processo)
-  @ManyToOne(() => Escala, (escala) => escala.servicos, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Escala, (escala) => escala.servicos, {
+    onDelete: 'CASCADE',
+    nullable: false,
+  })
   @JoinColumn({ name: 'escala_id' })
   escala: Escala;
 

@@ -1,4 +1,10 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreatePermutaDto } from './create-permuta.dto';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 
-export class UpdatePermutaDto extends PartialType(CreatePermutaDto) {}
+export class UpdatePermutaDto {
+  @IsIn(['SIM', 'NAO'])
+  acao!: 'SIM' | 'NAO';
+
+  @IsOptional()
+  @IsString()
+  justificativa?: string;
+}
