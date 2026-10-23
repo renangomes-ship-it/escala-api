@@ -1,4 +1,12 @@
-import { Controller, Post, Get, Body, Param, Patch, ForbiddenException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Patch,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PermutaService } from './permuta.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../oficial/entities/oficial.entity';
@@ -9,6 +17,7 @@ import { UpdatePermutaDto } from './dto/update-permuta.dto';
 import { TrocaAdministrativaDto } from './dto/troca-administrativa.dto';
 import { PublicarPermutasDto } from './dto/publicar-permutas.dto';
 import { AjustarEscolhaDto } from './dto/ajustar-escolha.dto';
+import { RealocarAdministrativaDto } from './dto/realocar-administrativa.dto';
 
 @Controller('permuta')
 export class PermutaController {
@@ -19,7 +28,9 @@ export class PermutaController {
       return undefined;
     }
     if (!user.obm) {
-      throw new ForbiddenException('O usuário autenticado não possui uma OBM vinculada.');
+      throw new ForbiddenException(
+        'O usuário autenticado não possui uma OBM vinculada.',
+      );
     }
     return user.obm;
   }
@@ -36,8 +47,15 @@ export class PermutaController {
   }
 
   @Post('ajustar-escolha')
-  ajustarEscolha(@Body() body: AjustarEscolhaDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.permutaService.ajustarEscolha(body, user.id, this.obmDoUsuario(user));
+  ajustarEscolha(
+    @Body() body: AjustarEscolhaDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.permutaService.ajustarEscolha(
+      body,
+      user.id,
+      this.obmDoUsuario(user),
+    );
   }
 
   @Post('administrativa')
@@ -46,7 +64,22 @@ export class PermutaController {
     @Body() body: TrocaAdministrativaDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.permutaService.trocaAdministrativa(body, this.obmDoUsuario(user));
+    return this.permutaService.trocaAdministrativa(
+      body,
+      this.obmDoUsuario(user),
+    );
+  }
+
+  @Post('realocar-administrativa')
+  @Roles(Role.ESCALANTE, Role.ADMIN_MASTER)
+  realocarAdministrativamente(
+    @Body() body: RealocarAdministrativaDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.permutaService.realocarAdministrativamente(
+      body,
+      this.obmDoUsuario(user),
+    );
   }
 
   @Patch(':id/responder')
@@ -83,7 +116,10 @@ export class PermutaController {
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser) {
     if (user.role === Role.OFICIAL) {
-      return this.permutaService.findByOficial(user.id, this.obmDoUsuario(user));
+      return this.permutaService.findByOficial(
+        user.id,
+        this.obmDoUsuario(user),
+      );
     }
     return this.permutaService.findAll(this.obmDoUsuario(user));
   }

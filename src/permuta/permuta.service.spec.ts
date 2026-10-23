@@ -17,7 +17,7 @@ describe('PermutaService', () => {
     const service = new PermutaService(
       permutaRepository as never,
       servicoRepository as never,
-      {} as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
     );
 
     await expect(
@@ -43,7 +43,7 @@ describe('PermutaService', () => {
     const service = new PermutaService(
       permutaRepository as never,
       servicoRepository as never,
-      {} as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
     );
 
     await expect(
@@ -53,6 +53,202 @@ describe('PermutaService', () => {
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(servicoRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('impede adicionar serviço além da cota de quem já finalizou a escolha', async () => {
+    const permutaRepository = { create: jest.fn(), save: jest.fn() };
+    const servicoRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 2,
+        tipo_escala: 'PRETA',
+        escala: { id: 1, obm: 'OBM de Teste', status: 'ABERTA' },
+        oficial_dia: null,
+        oficial_sobreaviso: null,
+      }),
+      count: jest.fn().mockResolvedValue(2),
+      save: jest.fn(),
+    };
+    const filaRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        status: 'FINALIZADO',
+        cota_preta: 2,
+        cota_roxa: 0,
+        cota_vermelha: 0,
+      }),
+    };
+    const service = new PermutaService(
+      permutaRepository as never,
+      servicoRepository as never,
+      filaRepository as never,
+    );
+
+    await expect(
+      service.trocaAdministrativa(
+        { servicoId: 2, tipoVaga: 'DIA', sainteId: null, entranteId: 9 },
+        'OBM de Teste',
+      ),
+    ).rejects.toThrow('Este oficial já concluiu a cota desta cor e função.');
+    expect(servicoRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('impede atribuir serviço a oficial inapto mesmo após o encerramento', async () => {
+    const servicoRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 2,
+        tipo_escala: 'PRETA',
+        escala: { id: 1, obm: 'OBM de Teste', status: 'FECHADA' },
+        oficial_dia: null,
+        oficial_sobreaviso: null,
+      }),
+      save: jest.fn(),
+    };
+    const filaRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        status: 'FINALIZADO',
+        observacao: 'INAPTO',
+        cota_preta: 0,
+        cota_roxa: 0,
+        cota_vermelha: 0,
+      }),
+    };
+    const service = new PermutaService(
+      { create: jest.fn(), save: jest.fn() } as never,
+      servicoRepository as never,
+      filaRepository as never,
+    );
+
+    await expect(
+      service.trocaAdministrativa(
+        {
+          servicoId: 2,
+          tipoVaga: 'DIA',
+          sainteId: null,
+          entranteId: 9,
+          justificativa: 'Necessidade operacional.',
+        },
+        'OBM de Teste',
+      ),
+    ).rejects.toThrow('foi declarado inapto para esta escala');
+    expect(servicoRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('permite remover um excesso já existente da cota finalizada', async () => {
+    const servico = {
+      id: 2,
+      tipo_escala: 'PRETA',
+      escala: { id: 1, obm: 'OBM de Teste', status: 'ABERTA' },
+      oficial_dia: { id: 9 },
+      oficial_sobreaviso: null,
+    };
+    const manager = {
+      save: jest.fn(),
+      transaction: jest.fn(async (executar) => executar(manager)),
+    };
+    const permutaRepository = {
+      create: jest.fn((registro) => ({ ...registro })),
+    };
+    const servicoRepository = {
+      manager,
+      findOne: jest.fn().mockResolvedValue(servico),
+      count: jest.fn().mockResolvedValue(3),
+    };
+    const filaRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        status: 'FINALIZADO',
+        cota_preta: 2,
+        cota_roxa: 0,
+        cota_vermelha: 0,
+      }),
+    };
+    const service = new PermutaService(
+      permutaRepository as never,
+      servicoRepository as never,
+      filaRepository as never,
+    );
+
+    await expect(
+      service.trocaAdministrativa(
+        { servicoId: 2, tipoVaga: 'DIA', sainteId: 9, entranteId: null },
+        'OBM de Teste',
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({ mensagem: expect.stringContaining('sucesso') }),
+    );
+    expect(servico.oficial_dia).toBeNull();
+    expect(manager.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('realoca serviço de oficial finalizado sem alterar sua cota', async () => {
+    const origem = {
+      id: 10,
+      tipo_escala: 'PRETA',
+      escala: { id: 1, obm: 'OBM de Teste', status: 'ABERTA' },
+      oficial_dia: { id: 9 },
+      oficial_sobreaviso: null,
+    };
+    const destino = {
+      id: 11,
+      tipo_escala: 'PRETA',
+      escala: { id: 1, obm: 'OBM de Teste', status: 'ABERTA' },
+      oficial_dia: null,
+      oficial_sobreaviso: null,
+    };
+    const manager = {
+      save: jest.fn(),
+      transaction: jest.fn(async (executar) => executar(manager)),
+    };
+    const permutaRepository = {
+      create: jest.fn((registro) => ({ ...registro })),
+    };
+    const servicoRepository = {
+      manager,
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce(origem)
+        .mockResolvedValueOnce(destino),
+      count: jest.fn().mockResolvedValue(2),
+    };
+    const filaRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        status: 'FINALIZADO',
+        cota_preta: 2,
+        cota_roxa: 0,
+        cota_vermelha: 0,
+      }),
+    };
+    const service = new PermutaService(
+      permutaRepository as never,
+      servicoRepository as never,
+      filaRepository as never,
+    );
+
+    await service.realocarAdministrativamente(
+      {
+        servicoOrigemId: 10,
+        servicoDestinoId: 11,
+        tipoVaga: 'DIA',
+        oficialId: 9,
+      },
+      'OBM de Teste',
+    );
+
+    expect(origem.oficial_dia).toBeNull();
+    expect(destino.oficial_dia).toEqual({ id: 9 });
+    expect(manager.save).toHaveBeenNthCalledWith(1, Servico, [origem, destino]);
+    expect(manager.save).toHaveBeenNthCalledWith(
+      2,
+      Permuta,
+      expect.arrayContaining([
+        expect.objectContaining({
+          oficial_sainte: { id: 9 },
+          oficial_entrante: null,
+        }),
+        expect.objectContaining({
+          oficial_sainte: null,
+          oficial_entrante: { id: 9 },
+        }),
+      ]),
+    );
   });
 
   it('recusa solicitação para uma vaga que o oficial já ocupa', async () => {
@@ -68,7 +264,7 @@ describe('PermutaService', () => {
     const service = new PermutaService(
       permutaRepository as never,
       servicoRepository as never,
-      {} as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
     );
 
     await expect(
@@ -104,7 +300,10 @@ describe('PermutaService', () => {
     };
     const servicoRepository = {
       manager,
-      findOne: jest.fn().mockResolvedValueOnce(origem).mockResolvedValueOnce(destino),
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce(origem)
+        .mockResolvedValueOnce(destino),
       find: jest.fn().mockResolvedValue([
         { ...origem, oficial_dia: { id: 9 } },
         { ...destino, oficial_dia: null },
@@ -146,8 +345,14 @@ describe('PermutaService', () => {
       2,
       Permuta,
       expect.arrayContaining([
-        expect.objectContaining({ oficial_sainte: { id: 9 }, oficial_entrante: null }),
-        expect.objectContaining({ oficial_sainte: null, oficial_entrante: { id: 9 } }),
+        expect.objectContaining({
+          oficial_sainte: { id: 9 },
+          oficial_entrante: null,
+        }),
+        expect.objectContaining({
+          oficial_sainte: null,
+          oficial_entrante: { id: 9 },
+        }),
       ]),
     );
   });
@@ -176,12 +381,15 @@ describe('PermutaService', () => {
       manager,
     };
     const servicoRepository = {
-      findOne: jest.fn().mockResolvedValueOnce(alvo).mockResolvedValueOnce(oferecido),
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce(alvo)
+        .mockResolvedValueOnce(oferecido),
     };
     const service = new PermutaService(
       permutaRepository as never,
       servicoRepository as never,
-      {} as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
     );
 
     await service.solicitarPermuta(
@@ -200,11 +408,13 @@ describe('PermutaService', () => {
     expect(registros[0].grupo_troca).toHaveLength(36);
     expect(registros[1].grupo_troca).toBe(registros[0].grupo_troca);
     expect(registros[0].eh_contrapartida).toBe(false);
-    expect(registros[1]).toEqual(expect.objectContaining({
-      eh_contrapartida: true,
-      oficial_sainte: { id: 9 },
-      oficial_entrante: { id: 8 },
-    }));
+    expect(registros[1]).toEqual(
+      expect.objectContaining({
+        eh_contrapartida: true,
+        oficial_sainte: { id: 9 },
+        oficial_entrante: { id: 8 },
+      }),
+    );
   });
 
   it('aprova e efetiva juntas as duas movimentações de uma troca', async () => {
@@ -257,17 +467,29 @@ describe('PermutaService', () => {
           .mockResolvedValueOnce(servicoAlvo)
           .mockResolvedValueOnce(servicoOferecido),
       } as never,
-      {} as never,
+      { findOne: jest.fn().mockResolvedValue(null) } as never,
     );
 
-    await service.responderPermuta(30, 'SIM', 'ESCALANTE', undefined, 'OBM de Teste');
+    await service.responderPermuta(
+      30,
+      'SIM',
+      'ESCALANTE',
+      undefined,
+      'OBM de Teste',
+    );
 
     expect(principal.status).toBe('APROVADA');
     expect(contrapartida.status).toBe('APROVADA');
     expect(servicoAlvo.oficial_dia).toEqual({ id: 9 });
     expect(servicoOferecido.oficial_dia).toEqual({ id: 8 });
-    expect(manager.save).toHaveBeenCalledWith(Servico, [servicoAlvo, servicoOferecido]);
-    expect(manager.save).toHaveBeenCalledWith(Permuta, [principal, contrapartida]);
+    expect(manager.save).toHaveBeenCalledWith(Servico, [
+      servicoAlvo,
+      servicoOferecido,
+    ]);
+    expect(manager.save).toHaveBeenCalledWith(Permuta, [
+      principal,
+      contrapartida,
+    ]);
   });
 
   it('registra em conjunto o aceite do destinatário de uma troca', async () => {
@@ -308,7 +530,10 @@ describe('PermutaService', () => {
 
     expect(principal.status).toBe('PENDENTE_APROVACAO');
     expect(contrapartida.status).toBe('PENDENTE_APROVACAO');
-    expect(manager.save).toHaveBeenCalledWith(Permuta, [principal, contrapartida]);
+    expect(manager.save).toHaveBeenCalledWith(Permuta, [
+      principal,
+      contrapartida,
+    ]);
   });
 
   it('exige motivo quando o escalante indefere uma permuta', async () => {
@@ -330,7 +555,13 @@ describe('PermutaService', () => {
     );
 
     await expect(
-      service.responderPermuta(70, 'NAO', 'ESCALANTE', undefined, 'OBM de Teste'),
+      service.responderPermuta(
+        70,
+        'NAO',
+        'ESCALANTE',
+        undefined,
+        'OBM de Teste',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(permutaRepository.save).not.toHaveBeenCalled();
   });

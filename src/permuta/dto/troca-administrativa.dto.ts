@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsOptional } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class TrocaAdministrativaDto {
   @IsInt()
@@ -14,4 +14,9 @@ export class TrocaAdministrativaDto {
   @IsOptional()
   @IsInt()
   entranteId!: number | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  justificativa?: string;
 }
