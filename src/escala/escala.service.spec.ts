@@ -2,6 +2,43 @@ import { EscalaService } from './escala.service';
 import { BadRequestException } from '@nestjs/common';
 
 describe('EscalaService', () => {
+  it('recusa encerramento quando ainda há escolha pendente', async () => {
+    const repository = {
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce({ id: 4, status: 'ABERTA' })
+        .mockResolvedValueOnce({
+          id: 4,
+          fila_escolhas: [{ status: 'ESCOLHENDO' }],
+        }),
+      update: jest.fn(),
+    };
+    const service = new EscalaService(repository as never);
+    await expect(service.update(4, { status: 'FECHADA' })).rejects.toThrow(
+      'Conclua a escolha de todos os oficiais',
+    );
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('libera encerramento quando todos os oficiais finalizaram', async () => {
+    const repository = {
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce({ id: 4, status: 'ABERTA' })
+        .mockResolvedValueOnce({
+          id: 4,
+          fila_escolhas: [{ status: 'FINALIZADO' }],
+        })
+        .mockResolvedValueOnce({ id: 4, status: 'FECHADA' }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const service = new EscalaService(repository as never);
+    await expect(
+      service.update(4, { status: 'FECHADA' }),
+    ).resolves.toMatchObject({ status: 'FECHADA' });
+    expect(repository.update).toHaveBeenCalledTimes(1);
+  });
+
   it('cria um serviço para cada dia quando a escala não recebe serviços', async () => {
     const repository = {
       create: jest.fn((value) => value),
@@ -9,7 +46,11 @@ describe('EscalaService', () => {
     };
     const service = new EscalaService(repository as never);
 
-    const escala = await service.create({ mes: 2, ano: 2024, obm: 'OBM de Teste' });
+    const escala = await service.create({
+      mes: 2,
+      ano: 2024,
+      obm: 'OBM de Teste',
+    });
 
     expect(escala.servicos).toHaveLength(29);
     expect(escala.servicos[0].data_servico).toBe('2024-02-01');
@@ -46,9 +87,9 @@ describe('EscalaService', () => {
     };
     const service = new EscalaService(repository as never);
 
-    await expect(service.update(4, { status: 'ABERTA' })).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.update(4, { status: 'ABERTA' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(repository.update).not.toHaveBeenCalled();
   });
 

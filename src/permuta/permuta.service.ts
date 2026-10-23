@@ -515,6 +515,15 @@ export class PermutaService {
                 'A ocupação de um dos serviços mudou depois da solicitação. A troca não pode ser efetivada.',
               );
             }
+            const outraFuncao =
+              item.tipo_vaga === 'DIA'
+                ? servicoGrupo.oficial_sobreaviso
+                : servicoGrupo.oficial_dia;
+            if (outraFuncao?.id === item.oficial_entrante.id) {
+              throw new BadRequestException(
+                'A grade mudou e a troca colocaria um oficial nas duas funções do mesmo dia.',
+              );
+            }
             if (item.tipo_vaga === 'DIA') {
               servicoGrupo.oficial_dia = {
                 id: item.oficial_entrante.id,
@@ -565,6 +574,15 @@ export class PermutaService {
             'A ocupação do serviço mudou depois da solicitação. A permuta não pode ser efetivada.',
           );
         }
+        const outraFuncao =
+          permuta.tipo_vaga === 'DIA'
+            ? servico.oficial_sobreaviso
+            : servico.oficial_dia;
+        if (outraFuncao?.id === permuta.oficial_entrante.id) {
+          throw new BadRequestException(
+            'A grade mudou e a permuta colocaria um oficial nas duas funções do mesmo dia.',
+          );
+        }
 
         if (permuta.tipo_vaga === 'DIA') {
           servico.oficial_dia = {
@@ -575,7 +593,11 @@ export class PermutaService {
             id: permuta.oficial_entrante.id,
           } as Oficial;
         }
-        await this.servicoRepository.save(servico);
+        if (justificativa) permuta.justificativa = justificativa;
+        return this.servicoRepository.manager.transaction(async (manager) => {
+          await manager.save(Servico, servico);
+          return manager.save(Permuta, permuta);
+        });
       }
     }
 

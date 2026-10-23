@@ -1,29 +1,24 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { execFile } from 'node:child_process';
+import { resolve } from 'node:path';
+import { promisify } from 'node:util';
 
-describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+const execute = promisify(execFile);
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    await app.init();
-  });
-
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
-  });
-
-  afterEach(async () => {
-    await app.close();
-  });
+// The child creates its disposable schema before importing AppModule.
+// Importing AppModule here would load the normal database configuration.
+describe('Aceitação HTTP com MySQL isolado', () => {
+  it('executa o ciclo completo e remove somente o banco temporário', async () => {
+    const { stdout } = await execute(
+      process.execPath,
+      ['test/acceptance.cjs'],
+      {
+        cwd: resolve(__dirname, '..'),
+        timeout: 90_000,
+        maxBuffer: 1024 * 1024,
+      },
+    );
+    expect(stdout).toMatch(/RESULT \d+ aprovados; 0 falhas\./);
+    expect(stdout).toContain('CLEANUP banco temporário removido');
+    console.info(stdout.trim());
+  }, 100_000);
 });

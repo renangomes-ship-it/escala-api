@@ -1,9 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Not, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Not, Repository } from 'typeorm';
 import { CreateEscalaDto } from './dto/create-escala.dto';
 import { UpdateEscalaDto } from './dto/update-escala.dto';
 import { Escala } from './entities/escala.entity';
+import { StatusFila } from '../fila-escolha/entities/fila-escolha.entity';
 
 @Injectable()
 export class EscalaService {
@@ -13,7 +18,8 @@ export class EscalaService {
   ) {}
 
   async create(createEscalaDto: CreateEscalaDto, manager?: EntityManager) {
-    const escalaRepository = manager?.getRepository(Escala) ?? this.escalaRepository;
+    const escalaRepository =
+      manager?.getRepository(Escala) ?? this.escalaRepository;
     if (!createEscalaDto.servicos || createEscalaDto.servicos.length === 0) {
       const { mes, ano } = createEscalaDto;
       const totalDias = new Date(ano, mes, 0).getDate();
@@ -28,7 +34,7 @@ export class EscalaService {
           data_servico: dataServico,
         });
       }
-      
+
       createEscalaDto.servicos = servicosGerados;
     } else {
       const { mes, ano, servicos } = createEscalaDto;
@@ -39,7 +45,9 @@ export class EscalaService {
           return `${ano}-${String(mes).padStart(2, '0')}-${dia}`;
         }),
       );
-      const datasRecebidas = new Set(servicos.map((servico) => servico.data_servico));
+      const datasRecebidas = new Set(
+        servicos.map((servico) => servico.data_servico),
+      );
       const coresValidas = new Set(['PRETA', 'ROXA', 'VERMELHA']);
 
       const calendarioInvalido =
@@ -65,8 +73,13 @@ export class EscalaService {
     return await escalaRepository.save(novaEscala);
   }
 
-  async findAll(mes?: number, ano?: number, obm?: string, incluirArquivadas = false) {
-    const filtros: any = {};
+  async findAll(
+    mes?: number,
+    ano?: number,
+    obm?: string,
+    incluirArquivadas = false,
+  ) {
+    const filtros: FindOptionsWhere<Escala> = {};
     if (mes) filtros.mes = mes;
     if (ano) filtros.ano = ano;
     if (obm) filtros.obm = obm;
@@ -81,7 +94,7 @@ export class EscalaService {
         },
         fila_escolhas: {
           oficial: true,
-        }
+        },
       },
     });
   }
@@ -101,12 +114,16 @@ export class EscalaService {
         // MUDANÇA AQUI TBM
         fila_escolhas: {
           oficial: true,
-        }
+        },
       },
     });
   }
 
-  async update(id: number, updateEscalaDto: UpdateEscalaDto, obm?: string | null) {
+  async update(
+    id: number,
+    updateEscalaDto: UpdateEscalaDto,
+    obm?: string | null,
+  ) {
     const escala = await this.escalaRepository.findOne({
       where: { id, ...(obm ? { obm } : {}) },
     });
@@ -114,14 +131,37 @@ export class EscalaService {
       throw new NotFoundException('Escala não encontrada.');
     }
     if (escala.status === 'ARQUIVADA') {
-      throw new BadRequestException('Uma escala arquivada não pode ser alterada.');
+      throw new BadRequestException(
+        'Uma escala arquivada não pode ser alterada.',
+      );
+    }
+    if (
+      ['ABERTA', 'PENDENTE_AJUSTE_MANUAL'].includes(escala.status) &&
+      ['FECHADA', 'PUBLICADA'].includes(updateEscalaDto.status ?? '')
+    ) {
+      const completa = await this.escalaRepository.findOne({
+        where: { id, ...(obm ? { obm } : {}) },
+        relations: { fila_escolhas: true },
+      });
+      if (
+        !completa?.fila_escolhas?.length ||
+        completa.fila_escolhas.some(
+          (registro) => registro.status !== StatusFila.FINALIZADO,
+        )
+      ) {
+        throw new BadRequestException(
+          'Conclua a escolha de todos os oficiais antes de encerrar as escolhas.',
+        );
+      }
     }
     const result = await this.escalaRepository.update(
       { id, ...(obm ? { obm } : {}), status: Not('ARQUIVADA') },
       updateEscalaDto,
     );
     if (!result.affected) {
-      throw new BadRequestException('A escala não pôde ser alterada porque foi arquivada.');
+      throw new BadRequestException(
+        'A escala não pôde ser alterada porque foi arquivada.',
+      );
     }
     return await this.findOne(id, obm, true);
   }
@@ -134,7 +174,9 @@ export class EscalaService {
       throw new NotFoundException('Escala não encontrada.');
     }
     if (escala.status === 'ARQUIVADA') {
-      throw new BadRequestException('Uma escala arquivada não pode ser excluída.');
+      throw new BadRequestException(
+        'Uma escala arquivada não pode ser excluída.',
+      );
     }
     const result = await this.escalaRepository.delete({
       id,
@@ -142,7 +184,9 @@ export class EscalaService {
       status: Not('ARQUIVADA'),
     });
     if (!result.affected) {
-      throw new BadRequestException('A escala não pôde ser excluída porque foi arquivada.');
+      throw new BadRequestException(
+        'A escala não pôde ser excluída porque foi arquivada.',
+      );
     }
     return { mensagem: `Escala com ID ${id} removida com sucesso.` };
   }
